@@ -2,38 +2,58 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-22.04
+    env:
+      JAVA_HOME: /usr/lib/jvm/temurin-17-jdk-amd64
 
     steps:
-      - name: Checkout source code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Install system dependencies
         run: |
           sudo apt update
-          sudo apt install -y zip unzip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev default-jdk
+          sudo apt install -y \
+            git zip unzip openjdk-17-jdk python3-pip python3-virtualenv \
+            autoconf libtool pkg-config zlib1g-dev libncurses5-dev \
+            libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev automake autopoint gettext
 
-      - name: Install Buildozer and Cython
+      - name: Install Buildozer, Cython, and python-for-android
         run: |
-          pip install --upgrade pip
-          pip install buildozer cython virtualenv
+          python3 -m pip install --upgrade pip
+          python3 -m pip install --upgrade setuptools cython==0.29.33 buildozer
+          python3 -m pip install --upgrade "https://github.com/kivy/python-for-android/archive/master.zip"
 
-      - name: Build the APK with Buildozer
+      - name: Set up Android SDK, accept licenses, and install tools
         run: |
-          yes | buildozer android debug
+          SDK_DIR="/home/runner/.buildozer/android/platform/android-sdk"
+          mkdir -p $SDK_DIR
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O climit.zip
+          mkdir -p $SDK_DIR/temp_tools
+          unzip -q climit.zip -d $SDK_DIR/temp_tools
+          mkdir -p $SDK_DIR/cmdline-tools/latest
+          mv $SDK_DIR/temp_tools/cmdline-tools/* $SDK_DIR/cmdline-tools/latest/
+          rm -rf $SDK_DIR/temp_tools climit.zip
+          mkdir -p $SDK_DIR/tools/bin
+          ln -sf $SDK_DIR/cmdline-tools/latest/bin/sdkmanager $SDK_DIR/tools/bin/sdkmanager
+          yes | $SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK_DIR --licenses || true
+          $SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK_DIR "platform-tools" "build-tools;37.0.0"
 
-      - name: Upload APK as Artifact
+      - name: Build with Buildozer
+        run: buildozer android debug   
+        
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: my-android-apk
+          name: android-apk
           path: bin/*.apk
