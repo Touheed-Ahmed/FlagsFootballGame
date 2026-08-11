@@ -423,8 +423,14 @@ class Arena(Widget):
         self.goal_scored = False
         self.winner = None
 
-        self.goal_height = 120
+        # Goal Dimensions
+        self.goal_height = 200     # Opening height
+        self.goal_depth = 50       # Depth extending outside field walls
         self.goal_y_start = 0
+
+        # Ball Physics & Speed Controls
+        self.speed_multiplier = 1.002  # Gradual acceleration (1.0 = static speed)
+        self.max_ball_speed = 600.0   # Fixed upper cap for speed (pixels/sec)
 
         self.gravity = 0.0
         self.central_force = 20.0
@@ -563,6 +569,16 @@ class Arena(Widget):
             ball.vx *= self.friction
             ball.vy *= self.friction
 
+            # Apply Speed Multiplier & Ceiling Cap
+            ball.vx *= self.speed_multiplier
+            ball.vy *= self.speed_multiplier
+
+            current_speed = math.hypot(ball.vx, ball.vy)
+            if current_speed > self.max_ball_speed:
+                scale = self.max_ball_speed / current_speed
+                ball.vx *= scale
+                ball.vy *= scale
+
             ball.x += ball.vx * dt
             ball.y += ball.vy * dt
 
@@ -652,6 +668,10 @@ class Arena(Widget):
             speed = math.hypot(ball.vx, ball.vy)
             if speed < 90:
                 scale = 90 / max(speed, 1)
+                ball.vx *= scale
+                ball.vy *= scale
+            elif speed > self.max_ball_speed:
+                scale = self.max_ball_speed / speed
                 ball.vx *= scale
                 ball.vy *= scale
 
@@ -765,7 +785,7 @@ class Arena(Widget):
             for i in range(6):
                 y = goal_y + self.goal_height * i / 5
                 Line(
-                    points=[self.x - 36, y, self.x, y],
+                    points=[self.x - self.goal_depth, y, self.x, y],
                     width=1,
                 )
 
@@ -785,7 +805,7 @@ class Arena(Widget):
                     points=[
                         self.x + self.width,
                         y,
-                        self.x + self.width + 36,
+                        self.x + self.width + self.goal_depth,
                         y,
                     ],
                     width=1,
