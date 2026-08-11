@@ -40,7 +40,7 @@ from kivy.uix.widget import Widget
 # ---------------------------------------------------------------------------
 
 FLAGS_DIR = "flags"
-BALL_RADIUS = 30
+BALL_RADIUS = 70
 
 # 193 UN member states / ISO alpha-2 codes used by the uploaded draft.
 COUNTRIES = [
@@ -287,6 +287,7 @@ class Tournament:
         self.bye_team = None
         self.match_index = 0
 
+        # Odd rounds receive one random bye.
         if len(teams) % 2:
             self.bye_team = teams.pop()
             self.winners.append(self.bye_team)
@@ -354,12 +355,14 @@ class Football(Widget):
         self.canvas.clear()
 
         with self.canvas:
+            # Ball shadow
             Color(0, 0, 0, 0.28)
             Ellipse(
                 pos=(self.x + 4, self.y - 5),
                 size=self.size,
             )
 
+            # Circular flag texture
             StencilPush()
             Ellipse(pos=self.pos, size=self.size)
             StencilUse()
@@ -372,12 +375,14 @@ class Football(Widget):
                     texture=self.flag_texture,
                 )
             else:
+                # Visible fallback when a flag is missing.
                 Color(0.25, 0.35, 0.45, 1)
                 Ellipse(pos=self.pos, size=self.size)
 
             StencilUnUse()
             StencilPop()
 
+            # Simple 3-D highlight/shadow.
             Color(1, 1, 1, 0.22)
             Ellipse(
                 pos=(self.x + 7, self.y + 14),
@@ -411,6 +416,10 @@ class Football(Widget):
 # ARENA
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# ARENA (UPDATED PHYSICS)
+# ---------------------------------------------------------------------------
+
 class Arena(Widget):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -423,16 +432,17 @@ class Arena(Widget):
         self.goal_scored = False
         self.winner = None
 
-        self.goal_height = 120
+        self.goal_height = 200
         self.goal_y_start = 0
 
-        self.gravity = 0.0
-        self.central_force = 20.0
-        self.wall_restitution = 0.95
-        self.floor_restitution = 0.95
-        self.ball_restitution = 1.35
-        self.friction = 1.0
-        self.min_bounce = 200.0
+        # --- PHYSICS ADJUSTMENTS ---
+        self.gravity = 0.0              # Fixed: Zero downward gravity
+        self.central_force = 20.0        # Reduced central tug so balls move freely
+        self.wall_restitution = 1.40    # Increased wall bounce responsiveness
+        self.floor_restitution = 1.40   # Increased floor bounce responsiveness
+        self.ball_restitution = 1.35    # Increased ball collision energy/bouncing
+        self.friction = 1.0             # Removed drag so balls maintain high speed
+        self.min_bounce = 200.0         # Higher minimum speed threshold
         self.match_time = 0.0
         self.max_match_time = 30.0
 
@@ -457,12 +467,13 @@ class Arena(Widget):
         self.ball1 = Football(team1)
         self.ball2 = Football(team2)
 
-        cx = self.x + self.width / 2
-        cy = self.y + self.height / 2
+        cx = self.width / 2
+        cy = self.height / 2
 
         self.ball1.set_center(cx - 80, cy + 20)
         self.ball2.set_center(cx + 80, cy - 20)
 
+        # --- INCREASED INITIAL BALL SPEEDS ---
         self.ball1.vx = random.uniform(250, 400)
         self.ball1.vy = random.uniform(-200, 200)
 
@@ -477,7 +488,6 @@ class Arena(Widget):
 
         self.countdown_value = 3
         self._show_countdown()
-
     def _remove_widget_safe(self, widget):
         if widget is not None and widget.parent is self:
             self.remove_widget(widget)
@@ -498,7 +508,6 @@ class Arena(Widget):
                 valign="middle",
             )
             self.countdown_label.size = self.size
-            self.countdown_label.pos = self.pos
             self.add_widget(self.countdown_label)
 
             self.countdown_value -= 1
@@ -515,7 +524,6 @@ class Arena(Widget):
                 valign="middle",
             )
             self.countdown_label.size = self.size
-            self.countdown_label.pos = self.pos
             self.add_widget(self.countdown_label)
             Clock.schedule_once(self._start_play, 0.45)
 
@@ -533,20 +541,20 @@ class Arena(Widget):
         self.match_time += dt
 
         if self.match_time >= self.max_match_time:
+            # Safety fallback so a match can never run forever.
             winner = random.choice([self.ball1.country_data, self.ball2.country_data])
             self._on_goal_scored(
                 "left" if winner == self.ball1.country_data else "right"
             )
             return
 
-        goal_y_bottom = self.y + self.goal_y_start
-        goal_y_top = goal_y_bottom + self.goal_height
-
         for ball in (self.ball1, self.ball2):
+            # Weak gravity.
             ball.vy += self.gravity * dt
 
-            cx = self.x + self.width / 2
-            cy = self.y + self.height / 2
+            # Gentle central attraction for curved/orbit-like motion.
+            cx = self.width / 2
+            cy = self.height / 2
             bx = ball.x + ball.radius
             by = ball.y + ball.radius
 
@@ -557,9 +565,11 @@ class Arena(Widget):
             ball.vx += self.central_force * dx / distance * dt
             ball.vy += self.central_force * dy / distance * dt
 
+            # Small random perturbation prevents permanent stable orbits.
             ball.vx += random.uniform(-7, 7) * dt
             ball.vy += random.uniform(-7, 7) * dt
 
+            # Air resistance.
             ball.vx *= self.friction
             ball.vy *= self.friction
 
@@ -569,32 +579,32 @@ class Arena(Widget):
             ball.angle += ball.spin * dt * 60
             ball.spin *= 0.992
 
-            # Left goal / wall (Bounded to Arena self.x)
-            if ball.x <= self.x - ball.radius:
-                if goal_y_bottom <= ball.y + ball.radius <= goal_y_top:
+            # Left goal.
+            if ball.x <= -ball.radius:
+                if self.goal_y_start <= ball.y + ball.radius <= self.goal_y_start + self.goal_height:
                     self._on_goal_scored("left")
                     return
-                ball.x = self.x
+                ball.x = ball.radius
                 ball.vx = abs(ball.vx) * self.wall_restitution
 
-            # Right goal / wall (Bounded to Arena self.x + self.width)
-            if ball.x + ball.radius >= self.x + self.width + ball.radius:
-                if goal_y_bottom <= ball.y + ball.radius <= goal_y_top:
+            # Right goal.
+            if ball.x + ball.radius >= self.width + ball.radius:
+                if self.goal_y_start <= ball.y + ball.radius <= self.goal_y_start + self.goal_height:
                     self._on_goal_scored("right")
                     return
-                ball.x = self.x + self.width - 2 * ball.radius
+                ball.x = self.width - 2 * ball.radius
                 ball.vx = -abs(ball.vx) * self.wall_restitution
 
-            # Floor (Bounded to Arena self.y)
-            if ball.y < self.y:
-                ball.y = self.y
+            # Floor.
+            if ball.y < 0:
+                ball.y = 0
                 ball.vy = abs(ball.vy) * self.floor_restitution
                 if abs(ball.vy) < self.min_bounce:
                     ball.vy = self.min_bounce
 
-            # Ceiling (Bounded to Arena self.y + self.height)
-            if ball.y + 2 * ball.radius > self.y + self.height:
-                ball.y = self.y + self.height - 2 * ball.radius
+            # Ceiling.
+            if ball.y + 2 * ball.radius > self.height:
+                ball.y = self.height - 2 * ball.radius
                 ball.vy = -abs(ball.vy) * self.wall_restitution
 
         self._resolve_ball_collision()
@@ -634,6 +644,7 @@ class Arena(Widget):
         if velocity_normal > 0:
             return
 
+        # Restitution > 1 gives the requested progressively stronger bounce.
         impulse = -(1 + self.ball_restitution) * velocity_normal
         impulse /= (1 / b1.mass + 1 / b2.mass)
 
@@ -648,6 +659,7 @@ class Arena(Widget):
         b1.spin += random.uniform(-3, 3)
         b2.spin += random.uniform(-3, 3)
 
+        # Prevent the balls from becoming too slow after a collision.
         for ball in (b1, b2):
             speed = math.hypot(ball.vx, ball.vy)
             if speed < 90:
@@ -662,6 +674,8 @@ class Arena(Widget):
         self.goal_scored = True
         self.state = "GOAL"
 
+        # Left goal belongs to team 1; right goal belongs to team 2.
+        # Scoring in a team's defended goal means that team loses.
         if side == "left":
             self.winner = self.ball2.country_data
         else:
@@ -722,7 +736,6 @@ class Arena(Widget):
         self._draw_arena()
 
     def on_pos(self, *_):
-        self.goal_y_start = max(0, (self.height - self.goal_height) / 2)
         self._draw_arena()
 
     def _draw_arena(self):
@@ -765,7 +778,7 @@ class Arena(Widget):
             for i in range(6):
                 y = goal_y + self.goal_height * i / 5
                 Line(
-                    points=[self.x - 18, y, self.x, y],
+                    points=[self.x - 36, y, self.x, y],
                     width=1,
                 )
 
@@ -785,7 +798,7 @@ class Arena(Widget):
                     points=[
                         self.x + self.width,
                         y,
-                        self.x + self.width + 18,
+                        self.x + self.width + 36,
                         y,
                     ],
                     width=1,
@@ -1034,9 +1047,13 @@ class WorldFootballGame(Widget):
     def _update_layout(self, *_):
         w, h = self.size
 
+        # Intended 9:16 portrait layout:
+        # top = 9:5, arena = 9:9, bottom = 9:2.
         header_h = w * 5 / 9
         arena_h = w
 
+        # If the window is unusually short, scale the whole content down
+        # rather than letting widgets extend outside the screen.
         if header_h + arena_h > h:
             scale = h / max(1, header_h + arena_h)
             header_h *= scale
@@ -1087,17 +1104,34 @@ class WorldFootballGame(Widget):
             return
 
         self.champion_screen.show_champion(champion)
-        Clock.schedule_once(lambda dt: self.restart_tournament(), 4.0)
+
+        # Automatically start a completely new random tournament.
+        Clock.schedule_once(
+            lambda dt: self.restart_tournament(),
+            4.0,
+        )
 
     def restart_tournament(self):
         self.champion_screen.hide()
         self.tournament.reset()
-        self.start_next_match()
+        Clock.schedule_once(
+            lambda dt: self.start_next_match(),
+            0.4,
+        )
 
+
+# ---------------------------------------------------------------------------
+# APP
+# ---------------------------------------------------------------------------
 
 class WorldFootballApp(App):
     def build(self):
-        Window.clearcolor = (0.01, 0.01, 0.02, 1)
+        Window.clearcolor = (0.02, 0.02, 0.025, 1)
+
+        # Desktop preview size. Buildozer/Android can use the device screen.
+        if Window.width > Window.height:
+            Window.size = (450, 800)
+
         return WorldFootballGame()
 
 
