@@ -6,7 +6,7 @@
 [app]
 
 # (str) Title of your application
-title = Country Flags Battle
+title = Country Flags Marbles Battle
 
 # (str) Package name
 package.name = flagbattle
