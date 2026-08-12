@@ -9,7 +9,7 @@
 title = Country Flags Marbles Battle
 
 # (str) Package name
-package.name = flagbattle
+package.name = flagfootballbattle
 
 # (str) Package domain (needed for android/ios packaging)
 package.domain = org.game
