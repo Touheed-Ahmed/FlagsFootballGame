@@ -12,6 +12,7 @@ Project structure:
         pk.png
         ...
         zw.png
+        background_music.mp3  <-- Added BGM here
 
 Flags must use lowercase ISO alpha-2 filenames.
 """
@@ -22,6 +23,7 @@ import random
 
 from kivy.app import App
 from kivy.clock import Clock
+from kivy.core.audio import SoundLoader
 from kivy.core.image import Image as CoreImage
 from kivy.core.window import Window
 from kivy.graphics import (
@@ -253,6 +255,20 @@ def get_flag_path(code):
     for path in candidates:
         if os.path.exists(path):
             return path
+    return None
+
+def get_bgm_path():
+    """Find the background music MP3 in common Kivy/Buildozer locations."""
+    candidates = (
+        os.path.join(FLAGS_DIR),
+        os.path.join(os.path.dirname(__file__), FLAGS_DIR),
+        os.path.join(os.getcwd(), FLAGS_DIR),
+    )
+    for folder in candidates:
+        if os.path.exists(folder):
+            for file in os.listdir(folder):
+                if file.lower().endswith(".mp3"):
+                    return os.path.join(folder, file)
     return None
 
 
@@ -1118,7 +1134,22 @@ class WorldFootballGame(Widget):
 class WorldFootballApp(App):
     def build(self):
         Window.clearcolor = (0.01, 0.01, 0.02, 1)
+        self.play_bgm()
         return WorldFootballGame()
+
+    def play_bgm(self):
+        bgm_path = get_bgm_path()
+        if bgm_path:
+            self.sound = SoundLoader.load(bgm_path)
+            if self.sound:
+                self.sound.loop = True
+                self.sound.volume = 0.5  # Adjust volume from 0.0 to 1.0
+                self.sound.play()
+
+    def on_stop(self):
+        # Stop sound when app closes to free resources
+        if hasattr(self, 'sound') and self.sound:
+            self.sound.stop()
 
 
 if __name__ == "__main__":
